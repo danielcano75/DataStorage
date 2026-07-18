@@ -1,0 +1,25 @@
+{
+  "configurations" : [
+    {
+      "id" : "7F2D59C1-71FF-43D7-A625-C2040DCDF11A",
+      "name" : "Configuration",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "testTimeoutsEnabled" : true
+  },
+  "testTargets" : [
+    {
+      "parallelizable" : false,
+      "target" : {
+        "containerPath" : "container:DataStorage.xcodeproj",
+        "identifier" : "296B5C1E300B554D009F040F",
+        "name" : "DataStorageTests"
+      }
+    }
+  ],
+  "version" : 1
+}

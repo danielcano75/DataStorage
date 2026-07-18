@@ -1,0 +1,132 @@
+# frozen_string_literal: true
+
+opt_out_usage
+
+default_platform(:ios)
+
+platform :ios do
+
+  # ── Tests ────────────────────────────────────────────────────────────────────
+
+  desc "Run all unit tests"
+  lane :test do
+    run_tests(
+      project: "DataStorage.xcodeproj",
+      scheme: "DataStorageTests",
+      testplan: "DataStorageTestPlan",
+      clean: true,
+      code_coverage: true,
+      output_directory: "fastlane/test_output",
+      output_types: "html,junit",
+      result_bundle: true,
+      xcodebuild_formatter: ""
+    )
+  end
+
+  # ── Release ───────────────────────────────────────────────────────────────────
+
+  desc "Build XCFramework, publish GitHub Release and update podspec"
+  lane :release do
+    version = ENV.fetch("VERSION") do
+      UI.user_error!("Set VERSION before running: VERSION=1.0.0 bundle exec fastlane release")
+    end
+
+    # sh runs from fastlane/ — use project root for all absolute paths
+    root              = File.expand_path("..", __dir__)
+    build_dir         = "#{root}/build"
+    device_archive    = "#{build_dir}/DataStorage-iOS.xcarchive"
+    simulator_archive = "#{build_dir}/DataStorage-Simulator.xcarchive"
+    xcframework_path  = "#{build_dir}/DataStorage.xcframework"
+    zip_name          = "DataStorage.xcframework.zip"
+    zip_path          = "#{build_dir}/#{zip_name}"
+    project_path      = "#{root}/DataStorage.xcodeproj"
+    podspec_path      = "#{root}/DataStorage.podspec"
+
+    # ── 1. Clean ────────────────────────────────────────────────────────────────
+    UI.message "Cleaning build directory..."
+    FileUtils.rm_rf(build_dir)
+    FileUtils.mkdir_p(build_dir)
+
+    # ── 2. Archive Device (arm64) ────────────────────────────────────────────
+    UI.message "Archiving for iOS device..."
+    sh "xcodebuild archive \
+      -project #{project_path} \
+      -scheme DataStorage \
+      -destination 'generic/platform=iOS' \
+      -archivePath #{device_archive} \
+      SKIP_INSTALL=NO \
+      BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
+      | xcbeautify"
+
+    # ── 3. Archive Simulator (arm64 + x86_64) ───────────────────────────────
+    UI.message "Archiving for iOS Simulator..."
+    sh "xcodebuild archive \
+      -project #{project_path} \
+      -scheme DataStorage \
+      -destination 'generic/platform=iOS Simulator' \
+      -archivePath #{simulator_archive} \
+      SKIP_INSTALL=NO \
+      BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
+      | xcbeautify"
+
+    # ── 4. Create XCFramework ────────────────────────────────────────────────
+    UI.message "Creating XCFramework..."
+    sh "xcodebuild -create-xcframework \
+      -framework #{device_archive}/Products/Library/Frameworks/DataStorage.framework \
+      -framework #{simulator_archive}/Products/Library/Frameworks/DataStorage.framework \
+      -output #{xcframework_path}"
+
+    # ── 5. Compress ──────────────────────────────────────────────────────────
+    UI.message "Compressing XCFramework..."
+    sh "cd #{build_dir} && zip -r #{zip_name} DataStorage.xcframework"
+
+    # ── 6. Create GitHub Release and upload asset ────────────────────────────
+    UI.message "Creating GitHub Release v#{version}..."
+    token = ENV["GITHUB_API_TOKEN"]
+    sh "GH_TOKEN=#{token} gh release delete v#{version} --repo danielcano75/DataStorage --yes 2>/dev/null || true"
+    sh "GH_TOKEN=#{token} gh release create v#{version} \
+      --repo danielcano75/DataStorage \
+      --title 'DataStorage #{version}' \
+      --notes '## DataStorage #{version}\\n\\nPrecompiled XCFramework for iOS 16+.' \
+      #{zip_path}"
+
+    # ── 7. Generate podspec and push to master ───────────────────────────────
+    UI.message "Generating podspec for #{version}..."
+    sh "cd #{root} && git fetch origin"
+    sh "cd #{root} && git checkout master"
+    sh "cd #{root} && git pull origin master"
+
+    File.write(podspec_path, <<~PODSPEC)
+      Pod::Spec.new do |spec|
+        spec.name             = "DataStorage"
+        spec.version          = "#{version}"
+        spec.summary          = "Generic DataStorage framework for iOS"
+        spec.homepage         = "https://github.com/danielcano75/DataStorage"
+        spec.license          = { :type => "MIT" }
+        spec.author           = { "danielcano75" => "daniel.cano.arbelaez@gmail.com" }
+        spec.platform         = :ios, "16.0"
+        spec.swift_versions   = "5.0"
+        spec.source           = {
+          :http => "https://github.com/danielcano75/DataStorage/releases/download/v#{version}/DataStorage.xcframework.zip"
+        }
+        spec.vendored_frameworks = "DataStorage.xcframework"
+      end
+    PODSPEC
+
+    sh "cd #{root} && git add DataStorage.podspec"
+    sh "cd #{root} && git diff --cached --quiet || git commit -m 'chore: generate podspec #{version} [skip ci]'"
+    sh "cd #{root} && git push origin master"
+
+    # ── 8. Publish podspec to Specs repo ─────────────────────────────────────
+    UI.message "Publishing podspec to Specs repo..."
+    token = ENV["GITHUB_API_TOKEN"]
+    specs_url = "https://x-access-token:#{token}@github.com/danielcano75/Specs.git"
+    Bundler.with_unbundled_env do
+      sh "pod repo add danielcano75-specs #{specs_url} 2>/dev/null || pod repo update danielcano75-specs"
+      sh "pod repo push danielcano75-specs #{podspec_path} --allow-warnings"
+    end
+
+    UI.success "Released DataStorage v#{version} successfully!"
+  end
+
+end
