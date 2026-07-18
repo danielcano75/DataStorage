@@ -14,14 +14,18 @@ DataStorage provides a thin abstraction layer over SwiftData. Instead of scatter
 
 ## Installation
 
-### Swift Package Manager
+### Cocoa Pods
 
-Add DataStorage to your `Package.swift`:
+Add DataStorage to your `Podfile`:
 
-```swift
-dependencies: [
-    .package(url: "https://github.com/your-org/DataStorage", from: "1.0.0")
-]
+```ruby
+source 'https://github.com/danielcano75/Specs.git'
+
+target 'YourApp' do
+  use_frameworks!
+  
+  pod 'DataStorage', '~> 1.0'
+end
 ```
 
 ## Usage
@@ -110,4 +114,4 @@ The protocol boundary means you can introduce alternative backends (CloudKit, Co
 
 ## License
 
-MIT
+Daniel Cano Arbelaez
