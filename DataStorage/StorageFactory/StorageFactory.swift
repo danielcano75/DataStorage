@@ -8,7 +8,7 @@
 import Foundation
 
 public enum StorageFactory {
-    public static func create(whit configuration: StorageConfiguration) throws -> StorageRepositoryProtocol {
+    public static func create(with configuration: StorageConfiguration) throws -> StorageRepositoryProtocol {
         try StorageRepository(with: configuration)
     }
 }
